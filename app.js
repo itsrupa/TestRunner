@@ -13,7 +13,7 @@ var path = require('path-extra');
 
 var username = process.env.JENKINS_USERNAME;
 var password = process.env.JENKINS_PASSWORD;
-if (username == '' || password == ''){
+if (!username  || !password ){
     console.log('Environmental variables JENKINS_USERNAME, JENKINS_PASSWORD do not exist');
     process.exit();
 }
@@ -22,9 +22,74 @@ var connectionString = 'http://' + username + ':' + password + '@moonlight.gogri
 //var jenkins = jenkinsapi.init(connectionString);
 var jenkins = require('jenkins')(connectionString)
 
-//verifyJenkinsLastBuildInfo('test');
-//buildModuleInJenkins();
-function verifyJenkinsLastBuildInfo() {
+var rerunCountTracker = {};
+
+function doJenkinsStep(jobName, callback) {
+
+  //internal function
+  function rerunJenkinsStep() {
+    console.log('Rerunning Jenkins Step for jobName: ' + jobName);
+    doJenkinsStep(jobName, callback);
+  }
+  //internal function
+  //Returns true if the job hasn't rerun >3 times.
+  function shouldReRunStep() {
+    if (rerunCountTracker[jobName]) {
+      rerunCountTracker[jobName] = rerunCountTracker[jobName] + 1;
+    } else {
+      rerunCountTracker[jobName] = 1;
+    }
+
+    if (rerunCountTracker[jobName] > 15) {
+      rerunCountTracker[jobName] = 0;
+      return false;
+    } else {
+      return true;
+    }
+  }
+
+
+  jenkins.job.get(jobName, function(err, jobInfo) {
+    if (err) {
+      callback({
+        "error": "Error doing jenkins.job.get for jobName: " + jobName + " Error: " + err
+      });
+    }
+
+	logAndStreamData("jobName: " + jobName + ' jobInfo.lastBuild.number: ' + jobInfo.lastBuild.number);
+
+    jenkins.build.get(jobName, jobInfo.lastBuild.number, function(err, buildInfo) {
+      if (err) {
+        callback({
+          "error": "Error doing jenkins.build.get: " + jobName + " Error: " + err
+        });
+      }
+
+	  logAndStreamData('Jenkins.Build.Get: ' + jobName + ' buildInfo.building = ' + buildInfo.building);
+
+      if (buildInfo.building) { //if it is still building, rerun
+        if (shouldReRunStep()) {
+          logAndStreamData("Rerun Count: " + rerunCountTracker[jobName] + " for jobName: " + jobName);
+          setTimeout(rerunJenkinsStep, 60000);
+        } else {
+		  logAndStreamData("Step failed. Already rerun more than 3 times");
+          callback({
+            "error": "Step failed. Already rerun more than 3 times"
+          });
+        }
+      } else if (buildInfo.result != 'SUCCESS') {
+		logAndStreamData("buildInfo.result != SUCCESS for jobName" + jobName);
+        callback({
+          "error": "buildInfo.result != SUCCESS for jobName" + jobName
+        });
+      } else {
+        callback();
+      }
+    });
+  });
+}
+
+/*function verifyJenkinsLastBuildInfo() {
     console.log('In Jenkins Build Info function');
     jenkins.job.get('environment', function(err, list) {
         if (err){ 
@@ -39,7 +104,7 @@ function verifyJenkinsLastBuildInfo() {
             console.log('list');
             if (list.building) {
                 console.log('building');
-                setTimeout(verifyJenkinsLastBuildInfo,60000)
+            setTimeout(verifyJenkinsLastBuildInfo,60000)
             } else if (list.result != 'SUCCESS') {
                 console.log('not successful');
             } else {
@@ -104,14 +169,19 @@ function verifyModuleLastBuildInfo() {
         );
     }
     );
-}
+}*/
 
-function buildModuleInJenkins(moduleName) {
+function deployModuleInJenkins(callback) {
     console.log('In building');
-    jenkins.job.build('DEPLOY_customer_portal_1',function(err) {
-            if (err) throw err
-            console.log('******')
-    })
+    var module = moduleName.replace('-','_');
+    console.log(module);
+    jenkins.job.build('DEPLOY_'+ module + '_1',function(err) {
+            if (err) {
+				callback({ err: 'Could not Build Error: ' + err});
+			} else {
+				callback();
+			}
+    });
 }
 require('shelljs/global');
 
@@ -150,9 +220,9 @@ app.get('/allResults', function(req, res) {
 });
 
 var socket;
-console.log('making connection')
+console.log('Waiting For Browser To Connect..')
 io.sockets.on('connection', function(soc) {
-  console.log('got connection ...')
+  console.log('A Browser Connected')
   socket = soc;
 
 });
@@ -164,124 +234,134 @@ var moduleName;
 
 
 function createResultsFile(releaseName, moduleName) {
+  var resultsRoot = __dirname + '/public/results/';
+  if (!fs.existsSync(resultsRoot)) {
+    mkdir(resultsRoot);
+  }
+
   releaseName = releaseName.replace("/", "_");
-  resultFile = __dirname + '/public/results/' + releaseName + "__" + moduleName + "__" + moment().format("MM-DD-YYYY-hhmmssA") + ".html";
+  resultFile = resultsRoot + releaseName + "__" + moduleName + "__" + moment().format("MM-DD-YYYY-hhmmssA") + ".txt";
   console.log("ResultFile Name:" + resultFile);
 }
 
 function logAndStreamData(data) {
+  data = '[' + moment().format("YYYY-MM-DDThh:mm:ss") + '] ' + data;
   //send it back to browser immediately
   socket.emit('TestRunnerChannel', data);
 
-  //write to result file as html <p> with different colors
-  var className = "text-success";
-  if (data.indexOf("Error") >= 0) {
-    className = "text-danger";
-  }
-  if (data.indexOf('Running Test For:') == 0) {
-    className = 'bg-primary customPadding';
-  }
-  echo('<p class="' + className + '">' + data + '</p>').toEnd(resultFile);
+  echo(data).toEnd(resultFile);
 }
 
-var moduleName = 'customer-portal';
-var releaseName = 'release/20140326'
+function stub(variable, cb) {
+  cb();
+}
+
+function waitAMin(callback) {
+  logAndStreamData('Waiting 1 min here ...');
+  setTimeout(function() {
+	  callback();
+  }, 60000);
+}
+
 function cdToFolderAsync(folder, callback) {
-    cd(folder);
-    callback(null, output)
+  cd(folder);
+  callback(null, output)
 }
 
-function runCommand1() {
-    console.log('Doing ... cd ~/stage');
-    console.log('Doing ... cd ~/stage');
-    cdToFolderAsync(path.homedir() + '/stage', this);
+function runStep1() {
+  logAndStreamData('Step 1: Doing cd ~/stage');
+  // cdToFolderAsync(path.homedir() + '/stage', this);
+  stub('bla', this);
 }
 
-function runCommand2(code, output) {
-    console.log("Command 1 complete");
-    console.log("Command 1 complete");
-    console.log('\nDoing ... git env fetch');
-    console.log('\nDoing ... git env fetch');
-    exec('git env fetch', this);
+function runStep2(code, output) {
+  logAndStreamData('Step 2: Doing "git env fetch"');
+  //exec('git env fetch', this);
+  stub('bla', this);
 }
 
-function runCommand3(code, output) {
-    console.log("Output from command2 " + output);
-    console.log("Output from command2 " + output);
-    console.log("\nCommand 2 complete");
-    console.log("\nCommand 2 complete")
-    console.log('\nDoing ... git env reset --hard origin/stage');
-    console.log('\nDoing ... git env reset --hard origin/stage');
-    exec('git env reset --hard origin/stage', this);
+function runStep3(code, output) {
+  logAndStreamData('Step 3: Doing "git env reset --hard origin/stage"');
+  //exec('git env reset --hard origin/stage', this);
+  stub('bla', this);
 }
 
-function runCommand4(code, output) {
-    console.log("Output from command3 " + output);
-    console.log("Output from command3 " + output);
-    console.log("\nCommand 3 complete");
-    console.log("\nCommand 3 complete");
-    console.log('Doing ... git env merge');
-    console.log('Doing ... git env merge');
-    exec('git env merge', this);
+function runStep4(code, output) {
+  logAndStreamData('Step 4: Doing "git env merge"');
+  //exec('git env merge', this);
+  stub('bla', this);
 }
 
-function runCommand5(code, output) {
-    console.log("Output from command4 " + output);
-    console.log("Output from command4 " + output);
-    console.log("\nCommand 4 complete");
-    console.log("\nCommand 4 complete");
-    console.log('Doing ... git env update');
-    console.log('Doing ... git env update');
-    exec('git env update', this);
+function runStep5(code, output) {
+  logAndStreamData('Step 5: Doing "git env update"');
+  //exec('git env update', this);
+  stub('bla', this);
 }
 
-function runCommand6(code, output) {
-    console.log("Output from command5 " + output);
-    console.log("Output from command5 " + output);
-    console.log("\nCommand 5 complete");
-    console.log("\nCommand 5 complete");
-    console.log('Doing ... git env follow '+ moduleName + ' ' + releaseName );
-    console.log('Doing ... git env follow '+ moduleName + ' ' + releaseName );
-    exec('git env follow ' + moduleName + ' ' + releaseName, this);
+function runStep6(code, output) {
+  logAndStreamData('Step 6: Doing "git env follow ' + moduleName + ' ' + releaseName);
+  //exec('git env follow ' + moduleName + ' ' + releaseName, this);
+  stub('bla', this);
 }
 
-function runCommand7(code, output) {
-    console.log("Output from command6 " + output);
-    console.log("Output from command6 " + output);
-    console.log("\nCommand 6 complete");
-    console.log("\nCommand 6 complete");
-    console.log('Doing ... git add ' + moduleName);
-    console.log('Doing ... git add ' + moduleName);
-    exec('git add ' + moduleName, this);
+function runStep7(code, output) {
+  logAndStreamData('Step 7: Doing "git add ' + moduleName);
+  //exec('git add ' + moduleName, this);
+  stub('bla', this);
 }
 
-function runCommand8(code, output) {
-    console.log("Output from command7 " + output);
-    console.log("Output from command7 " + output);
-    console.log("\nCommand 7 complete");
-    console.log("\nCommand 7 complete");
-    console.log('Doing ... git commit -m "Autocommit from TestRunner"');
-    console.log('Doing ... git commit -m "Autocommit from TestRunner"');
-    exec('git commit -m "AutoCommit from TestRunner"', this);
+function runStep8(code, output) {
+  logAndStreamData('Step 8: Doing "git commit -m "Autocommit from TestRunner"');
+  //exec('git commit -m "AutoCommit from TestRunner"', this);
+  stub('bla', this);
 }
 
-function runCommand9(code, output) {
-    console.log("Output from command8 " + output);
-    console.log("Output from command8 " + output);
-    console.log("\nCommand 8 complete");
-    console.log("\nCommand 8 complete");
-    console.log('Doing ... git push');
-    console.log('Doing ... git push');
-    exec('git push', this);
+function runStep9(code, output) {
+  logAndStreamData('Step 9: Doing "git push"');
+  //exec('git push', this);
+  stub('bla', this);
+}
+
+
+function verifyBuildInfoEnvironment() {
+  logAndStreamData('Step 10: Verifying Last Build Info for Job: "environment"');
+  doJenkinsStep('environment', this);
+}
+
+function verifyBuildInfoPackageCache() {
+  logAndStreamData('Step 11: Verifying Last Build Info for Job: "package_cache"');
+  doJenkinsStep('package_cache', this);
+}
+
+function verifybuildInfoModuleName() {
+  logAndStreamData('Step 12: Verifying Last Build Info for Job: "' + moduleName + '"');
+  doJenkinsStep(moduleName, this);
+}
+
+function buildModuleInJenkins() {
+    logAndStreamData('Step 13: Kicking off build for Module Name: "' + moduleName + '"');
+	deployModuleInJenkins(this);
+}
+
+function waitinStep() {
+  logAndStreamData('Waiting for a min in between Steps');
+  waitAMin(this);
+}
+
+function verifyNewBuildInJenkins_1() {
+  var m =  'DEPLOY_' + moduleName.replace('-','_') + '_1';
+  logAndStreamData('Step 14: Verifying Last Deploy Info for Job: "' + m + '"');
+  doJenkinsStep(m, this);
+}
+
+function verifyNewBuildInJenkins_2() {
+  var m =  'DEPLOY_' + moduleName.replace('-','_') + '_2';
+  logAndStreamData('Step 15: Verifying Last Deploy Info for Job: "' + m + '"');
+  doJenkinsStep(m, this)
 }
 
 function runFinalStep(moduleName, code, output) {
-    console.log("Git Push Command now complete");
-    logAndStreamData("Git Push Command now complete");
-    console.log(moduleName);
-    verifyJenkinsLastBuildInfo();
-    console.log("This is Final Step");
-    logAndStreamData("This is Final Step");
+  logAndStreamData('Step final: Starting Jenkins Commands');
 }
 
 function startTest(releaseName, mName) {
@@ -289,45 +369,33 @@ function startTest(releaseName, mName) {
   createResultsFile(releaseName, mName);
 
   logAndStreamData("Running Test For: Release Name: " + releaseName + " Module Name: " + mName);
-  
+
   var data = which('git');
   if (!data) {
-      logAndStreamData('Sorry, this script requires git');
+    logAndStreamData('Sorry, this script requires git');
+    process.exit();
   }
 
   console.log(moduleName);
-  Step(runCommand1,
-      runCommand2,
-      runCommand3,
-      runCommand4,
-      runCommand5,
-      runCommand6,
-      runCommand7,
-      runCommand8,
-      runCommand9,
-      runFinalStep
+  Step(runStep1,
+    runStep2,
+    runStep3,
+    runStep4,
+    runStep5,
+    runStep6,
+    runStep7,
+    runStep8,
+    runStep9,
+    verifyBuildInfoEnvironment,
+    verifyBuildInfoPackageCache,
+    verifybuildInfoModuleName,
+    buildModuleInJenkins,
+	waitinStep,
+	verifyNewBuildInJenkins_1,
+	waitinStep,
+	verifyNewBuildInJenkins_2,
+    runFinalStep
   );
-  
-  logAndStreamData('Doing... git commit -am "Auto-commit" ');
-  var result = exec('git commit -am "Auto-commit"');
-  if (result.code !== 0) {
-    echo('Error: Git commit failed');
-    console.dir(result.output);
-    logAndStreamData('Error... ' + result.output);
-    // exit(1);
-  }
-
-  setTimeout(function() {
-
-    logAndStreamData("After 5 seconds");
-  }, 5000);
-
-  var result2 = exec('git commit -am "Auto-commit"');
-  if (result2.code !== 0) {
-    logAndStreamData('Error2: Git commit failed');
-    logAndStreamData(result2.output);
-    // exit(1);
-  }
 }
 
 app.configure('development', function() {
