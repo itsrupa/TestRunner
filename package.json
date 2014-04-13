@@ -12,6 +12,7 @@
     "moment":"*",
     "step":"*",
     "path-extra":"*",
-    "jenkins":"*"
+    "jenkins":"*",
+    "nodemailer":"*"
   }
 }

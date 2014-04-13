@@ -9,7 +9,7 @@ var moment = require('moment');
 var fs = require('fs');
 var Step = require('step');
 var path = require('path-extra');
-var jenkinsapi = require('jenkins-api');
+//var jenkinsapi = require('jenkins-api');
 
 var username = process.env.JENKINS_USERNAME;
 var password = process.env.JENKINS_PASSWORD;
@@ -19,60 +19,100 @@ if (username == '' || password == ''){
 }
 
 var connectionString = 'http://' + username + ':' + password + '@moonlight.gogrid.net';
-var jenkins = jenkinsapi.init(connectionString);
+//var jenkins = jenkinsapi.init(connectionString);
+var jenkins = require('jenkins')(connectionString)
 
-function verifyJenkinsLastBuildInfo(moduleName) {
+//verifyJenkinsLastBuildInfo('test');
+//buildModuleInJenkins();
+function verifyJenkinsLastBuildInfo() {
     console.log('In Jenkins Build Info function');
-    jenkins.last_build_info('environment', function(err, data) {
+    jenkins.job.get('environment', function(err, list) {
         if (err){ 
             return console.log(err); 
         }
-        console.log(data)
-        if (data.building){
-            console.log('building');
-            setTimeout(verifyJenkinsLastBuildInfo,60000)
-        }else if (data.result != 'SUCCESS') {
-            console.log('not successful')
-        }else {
-            verifyPackageCacheLastBuildInfo();
-            verifyModuleLastBuildInfo(moduleName);
+        console.log(list);
+        console.log(list.lastBuild.number)
+        jenkins.build.get('environment',list.lastBuild.number, function(err, list) {
+            if (err) {
+                return console.log(err);
+            }
+            console.log('list');
+            if (list.building) {
+                console.log('building');
+                setTimeout(verifyJenkinsLastBuildInfo,60000)
+            } else if (list.result != 'SUCCESS') {
+                console.log('not successful');
+            } else {
+                verifyPackageCacheLastBuildInfo();
+            }
         }
+        );
     }
     );
 }
 
 function verifyPackageCacheLastBuildInfo() {
     console.log('In Package Cache');
-    jenkins.last_build_info('package_cache', function(err, data) {
+    jenkins.job.get('package_cache', function(err, list) {
         if (err){
             return console.log(err);
         }
-        if (data.building){
-            console.log ('building');
-            setTimeout(verifyPackageCacheLastBuildInfo,60000)
-        }else if (data.result != 'SUCCESS') {
-            console.log('not successful');
+        console.log(list);
+        console.log(list.lastBuild.number);
+        jenkins.build.get('package_cache',list.lastBuild.number, function(err, list) {
+            if (err) {
+                return console.log(err);
+            }
+            console.log('Got the list');
+            if (list.building){
+                console.log ('building');
+                setTimeout(verifyPackageCacheLastBuildInfo,60000);
+            } else if (list.result != 'SUCCESS') {
+                console.log('not successful');
+            } else {
+                verifyModuleLastBuildInfo();
+            }
         }
+        );
     }
     );
 }
 
-function verifyModuleLastBuildInfo(moduleName) {
-    console.log('In ' + moduleName);
-    jenkins.last_build_info(moduleName, function(err, data) {
+function verifyModuleLastBuildInfo() {
+    console.log('In verifyModuleLastBuildInfo');
+    console.log(moduleName);
+    jenkins.job.get(moduleName, function(err, list) {
         if (err){
             return console.log(err);
         }
-        if (data.building){
-            console.log ('building');
-            setTimeout(verifyModuleLastBuildInfo,60000)
-        }else if (data.result != 'SUCCESS') {
-            console.log('not successful');
+        console.log(list);
+        console.log(list.lastBuild.number);
+        jenkins.build.get(moduleName,list.lastBuild.number, function(err, list) {
+            if (err) {
+                return console.log(err);
+            }
+            console.log(list);
+            if (list.building){
+                console.log ('building');
+                setTimeout(verifyModuleLastBuildInfo,60000)
+            } else if (list.result != 'SUCCESS') {
+                console.log('not successful');
+            } else {
+                buildModuleInJenkins(moduleName);
+            }
         }
+        );
     }
     );
 }
 
+function buildModuleInJenkins(moduleName) {
+    console.log('In building');
+    jenkins.job.build('DEPLOY_customer_portal_1',function(err) {
+            if (err) throw err
+            console.log('******')
+    })
+}
 require('shelljs/global');
 
 var app = express();
@@ -119,6 +159,8 @@ io.sockets.on('connection', function(soc) {
 
 //global result file
 var resultFile;
+//global moduleName
+var moduleName;
 
 
 function createResultsFile(releaseName, moduleName) {
@@ -233,15 +275,27 @@ function runCommand9(code, output) {
     exec('git push', this);
 }
 
-function runFinalStep(code, output) {
+function runFinalStep(moduleName, code, output) {
     console.log("Git Push Command now complete");
     logAndStreamData("Git Push Command now complete");
+    console.log(moduleName);
     verifyJenkinsLastBuildInfo();
     console.log("This is Final Step");
     logAndStreamData("This is Final Step");
 }
 
-function startTest(releaseName, moduleName) {
+function startTest(releaseName, mName) {
+  moduleName = mName;
+  createResultsFile(releaseName, mName);
+
+  logAndStreamData("Running Test For: Release Name: " + releaseName + " Module Name: " + mName);
+  
+  var data = which('git');
+  if (!data) {
+      logAndStreamData('Sorry, this script requires git');
+  }
+
+  console.log(moduleName);
   Step(runCommand1,
       runCommand2,
       runCommand3,
@@ -254,14 +308,6 @@ function startTest(releaseName, moduleName) {
       runFinalStep
   );
   
-  createResultsFile("release/2012323", "customer-portal");
-
-  logAndStreamData("Running Test For: Release Name: " + releaseName + " Module Name: " + moduleName);
-  var data = which('git');
-  if (!data) {
-    logAndStreamData('Sorry, this script requires git');
-  }
-
   logAndStreamData('Doing... git commit -am "Auto-commit" ');
   var result = exec('git commit -am "Auto-commit"');
   if (result.code !== 0) {
