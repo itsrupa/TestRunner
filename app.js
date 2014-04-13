@@ -20,30 +20,22 @@ if (username == '' || password == ''){
 
 var connectionString = 'http://' + username + ':' + password + '@moonlight.gogrid.net';
 var jenkins = jenkinsapi.init(connectionString);
-verifyEnvLastBuildInfo();
-//jenkins.all_jobs(function(err, data) {
-//      if (err){ return console.log(err); }
-//        console.log(data)
-//});
 
-//jenkins.job_info('environment', function(err, data) {
-//      if (err){ return console.log(err); }
-//        console.log(data)
-//});
-
-function verifyEnvLastBuildInfo() {
+function verifyJenkinsLastBuildInfo(moduleName) {
     console.log('In Jenkins Build Info function');
     jenkins.last_build_info('environment', function(err, data) {
         if (err){ 
             return console.log(err); 
         }
+        console.log(data)
         if (data.building){
             console.log('building');
-            setTimeout(verifyEnvLastBuildInfo,60000)
+            setTimeout(verifyJenkinsLastBuildInfo,60000)
         }else if (data.result != 'SUCCESS') {
             console.log('not successful')
         }else {
             verifyPackageCacheLastBuildInfo();
+            verifyModuleLastBuildInfo(moduleName);
         }
     }
     );
@@ -51,7 +43,7 @@ function verifyEnvLastBuildInfo() {
 
 function verifyPackageCacheLastBuildInfo() {
     console.log('In Package Cache');
-    jenkins.last_build_info('package_cachee', function(err, data) {
+    jenkins.last_build_info('package_cache', function(err, data) {
         if (err){
             return console.log(err);
         }
@@ -65,16 +57,21 @@ function verifyPackageCacheLastBuildInfo() {
     );
 }
 
-
-//jenkins.job.list(function(err, list) {
-//        if (err) throw err
-//        console.log(list)
-//})
-
-//jenkins.build.get('environment', '907', function(err, list) {
-//    if (err) throw err
-//    console.log(list)
-//})
+function verifyModuleLastBuildInfo(moduleName) {
+    console.log('In ' + moduleName);
+    jenkins.last_build_info(moduleName, function(err, data) {
+        if (err){
+            return console.log(err);
+        }
+        if (data.building){
+            console.log ('building');
+            setTimeout(verifyModuleLastBuildInfo,60000)
+        }else if (data.result != 'SUCCESS') {
+            console.log('not successful');
+        }
+    }
+    );
+}
 
 require('shelljs/global');
 
@@ -154,81 +151,109 @@ function cdToFolderAsync(folder, callback) {
 
 function runCommand1() {
     console.log('Doing ... cd ~/stage');
+    console.log('Doing ... cd ~/stage');
     cdToFolderAsync(path.homedir() + '/stage', this);
 }
 
 function runCommand2(code, output) {
     console.log("Command 1 complete");
+    console.log("Command 1 complete");
+    console.log('\nDoing ... git env fetch');
     console.log('\nDoing ... git env fetch');
     exec('git env fetch', this);
 }
 
 function runCommand3(code, output) {
     console.log("Output from command2 " + output);
+    console.log("Output from command2 " + output);
     console.log("\nCommand 2 complete");
+    console.log("\nCommand 2 complete")
+    console.log('\nDoing ... git env reset --hard origin/stage');
     console.log('\nDoing ... git env reset --hard origin/stage');
     exec('git env reset --hard origin/stage', this);
 }
 
 function runCommand4(code, output) {
     console.log("Output from command3 " + output);
+    console.log("Output from command3 " + output);
     console.log("\nCommand 3 complete");
+    console.log("\nCommand 3 complete");
+    console.log('Doing ... git env merge');
     console.log('Doing ... git env merge');
     exec('git env merge', this);
 }
 
 function runCommand5(code, output) {
     console.log("Output from command4 " + output);
+    console.log("Output from command4 " + output);
     console.log("\nCommand 4 complete");
+    console.log("\nCommand 4 complete");
+    console.log('Doing ... git env update');
     console.log('Doing ... git env update');
     exec('git env update', this);
 }
 
 function runCommand6(code, output) {
     console.log("Output from command5 " + output);
+    console.log("Output from command5 " + output);
     console.log("\nCommand 5 complete");
+    console.log("\nCommand 5 complete");
+    console.log('Doing ... git env follow '+ moduleName + ' ' + releaseName );
     console.log('Doing ... git env follow '+ moduleName + ' ' + releaseName );
     exec('git env follow ' + moduleName + ' ' + releaseName, this);
 }
 
 function runCommand7(code, output) {
     console.log("Output from command6 " + output);
+    console.log("Output from command6 " + output);
     console.log("\nCommand 6 complete");
+    console.log("\nCommand 6 complete");
+    console.log('Doing ... git add ' + moduleName);
     console.log('Doing ... git add ' + moduleName);
     exec('git add ' + moduleName, this);
 }
 
 function runCommand8(code, output) {
     console.log("Output from command7 " + output);
+    console.log("Output from command7 " + output);
     console.log("\nCommand 7 complete");
+    console.log("\nCommand 7 complete");
+    console.log('Doing ... git commit -m "Autocommit from TestRunner"');
     console.log('Doing ... git commit -m "Autocommit from TestRunner"');
     exec('git commit -m "AutoCommit from TestRunner"', this);
 }
 
 function runCommand9(code, output) {
     console.log("Output from command8 " + output);
+    console.log("Output from command8 " + output);
     console.log("\nCommand 8 complete");
+    console.log("\nCommand 8 complete");
+    console.log('Doing ... git push');
     console.log('Doing ... git push');
     exec('git push', this);
 }
 
 function runFinalStep(code, output) {
     console.log("Git Push Command now complete");
+    logAndStreamData("Git Push Command now complete");
+    verifyJenkinsLastBuildInfo();
     console.log("This is Final Step");
+    logAndStreamData("This is Final Step");
 }
 
-//Step(runCommand1,
-//    runCommand2,
-//    runCommand3,
-//    runCommand4,
-//    runCommand5,
-//    runCommand6,
-//    runCommand7,
-//    runCommand8,
-//    runCommand9,
-//    runFinalStep
-//);
 function startTest(releaseName, moduleName) {
+  Step(runCommand1,
+      runCommand2,
+      runCommand3,
+      runCommand4,
+      runCommand5,
+      runCommand6,
+      runCommand7,
+      runCommand8,
+      runCommand9,
+      runFinalStep
+  );
+  
   createResultsFile("release/2012323", "customer-portal");
 
   logAndStreamData("Running Test For: Release Name: " + releaseName + " Module Name: " + moduleName);
