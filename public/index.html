@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+	<html lang="en">
+		<head>
+		<meta charset="utf-8">
+		<meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Bootstrap 101 Template</title>
+		<!-- Bootstrap -->
+		<link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css">
+		<!-- Optional theme -->
+		<link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap-theme.min.css">
+		<style>
+		.customPadding {
+			padding:15px;
+		}
+		</style>
+		<!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
+		<!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+		<!--[if lt IE 9]>
+		<script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+		<script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+		<![endif]-->
+	</head>
+		<body style='padding-top:40px'>
+			<div class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+				<div class="container">
+					<div class="navbar-header">
+					
+					<a class="navbar-brand" href="#">Test Runner</a>
+				</div>
+					<div class="collapse navbar-collapse">
+						<ul class="nav navbar-nav">
+						<li id='runTestsTab' class='active'><a href="#">Run Tests</a></li>
+						<li id='showPreviousResultsTab'><a  href="javascript:void(0)">Previous Results</a></li>
+					</ul>
+					</div><!--/.nav-collapse -->
+				</div>
+			</div>
+				<div class="container" style="margin:10px">
+				<img src="/gogrid_logo.png" class="img-responsive img-rounded"   style="width: 20%; height: 20%" alt="Reponsive image" ></img>
+			</div>
+				<div id='runResultsMain'>
+					<div>
+						<div class="well" style="max-width: 1150px; margin: 0 auto 10px;">
+						<h2>Start Tests:</h2>
+							<form class="form-horizontal" role="form">
+								<div class="form-group">
+								<label for="releaseName" class="col-sm-4 control-label text-right">Release Name:</label>
+									<div class=" col-sm-5">
+									<input class="form-control input-large " id="releaseName" placeholder="release/20140326">
+								</div>
+							</div>
+								<div class="form-group">
+								<label for="moduleName"  class="col-sm-4 control-label text-right">Module Name:</label>
+									<div class="col-sm-5">
+									<input  class="form-control" id="moduleName" placeholder="customer-portal">
+								</div>
+							</div>
+								<div class="form-group">
+									<div class="col-sm-offset-5 col-sm-3">
+									<div  id='startTest' class="btn btn-primary btn-lg btn-block">Go</div>
+								</div>
+							</div>
+						</form>
+					</div>
+				</div>
+					<div style="max-width: 1150px; margin: 0 auto 10px;">
+					<h2>Test Results: </h2>
+					<!-- results -->
+						<div id="div1" class='resultsDiv container'>
+					</div>
+				</div>
+				
+				</div><!-- /.runResultsMain -->
+					<div id='showPreviousResultsMain'>
+						<div id='prevResultsList'>
+					</div>
+				</div>
+				<!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+				<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
+				<script src="//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js"></script>
+				<script src="/socket.io/socket.io.js"></script>
+				<script>
+				function showRunTestsTab() {
+					$("#showPreviousResultsTab").attr('class', '');
+					$("#runTestsTab").attr('class', 'active');
+
+					$('#showPreviousResultsMain').hide();
+					$('#runResultsMain').show();
+				}
+
+				function showPreviousTestsTab() {
+					$("#runTestsTab").attr('class', '');
+					$("#showPreviousResultsTab").attr('class', 'active');
+
+					$('#runResultsMain').hide();
+					$('#showPreviousResultsMain').show();
+				}
+
+				$('#runTestsTab').bind('click', showRunTestsTab);
+
+				$( "#startTest" ).bind( "click", function() {
+					showRunTestsTab();	
+					var releaseName = $('#releaseName').val();
+					var moduleName  = $('#moduleName').val();
+						// if(releaseName == "" || moduleName == "") {
+													// 	alert("Both 'Release Name' And 'Module Name' Are Required");
+													// 	return;
+						// }
+						//clear old results..
+						$("#div1").html("");
+						//make ajax call to server
+						$.ajax({
+							type: "POST",
+							url: '/startTest',
+							data: {releaseName : releaseName, moduleName: moduleName},
+							success: function() {alert('success')},
+							dataType: 'application/json'
+						});
+					});
+				$( "#showPreviousResultsTab" ).bind( "click", function() {
+						showPreviousTestsTab();
+						//clear old results..
+						$("#div1").html("");
+						//make ajax call to server
+						$.ajax({
+							type: "GET",
+							url: '/allResults',
+							success: function(data) {
+								$("#showPreviousResultsMain").html("");
+								for(var i =0; i < data.length; i++) {
+									var str = '<p class="text-primary">'+
+										'<a href="/results/' + data[i] +'">'+ data[i] +'</a>'+
+										 '</p>';
+
+									$("#showPreviousResultsMain").append(str);
+								}
+							}
+						});
+					});
+				function appendDataToDiv(data) {
+					var className  = "text-success";
+					if(data.indexOf("Error") >=0) {
+						className = "text-danger";
+					}
+					if(data.indexOf('Running Test For:') == 0) {
+						className = 'bg-primary customPadding';
+					}
+					$("#div1").append('<p class="'+className+'">' + data + '</p>');
+				}
+				var socket = io.connect(location);
+				socket.on('TestRunnerChannel', function (data) {
+					appendDataToDiv(data);
+				});
+				</script>
+			</body>
+		</html>
