@@ -360,6 +360,24 @@ function verifyNewBuildInJenkins_2() {
   doJenkinsStep(m, this)
 }
 
+function runStep1ForTest() {
+  logAndStreamData('Step 1: Doing cd ~/autoreg');
+  // cdToFolderAsync(path.homedir() + '/autoreg', this);
+  stub('bla', this);
+}
+
+function runStep2ForTest(code, output) {
+  logAndStreamData('Step 2: Doing "git checkout develop"');
+  //exec('git checkout develop', this);
+  stub('bla', this);
+}
+
+function runStep3ForTest(code, output) {
+  logAndStreamData('Step 2: Doing "git pull"');
+  //exec('git pull', this);
+  stub('bla', this);
+}
+
 function runFinalStep(moduleName, code, output) {
   logAndStreamData('Step final: Starting Jenkins Commands');
 }
@@ -394,6 +412,8 @@ function startTest(releaseName, mName) {
 	verifyNewBuildInJenkins_1,
 	waitinStep,
 	verifyNewBuildInJenkins_2,
+	runStep1ForTest,
+
     runFinalStep
   );
 }
