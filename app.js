@@ -175,13 +175,24 @@ function deployModuleInJenkins(callback) {
     console.log('In building');
     var module = moduleName.replace('-','_');
     console.log(module);
-    jenkins.job.build('DEPLOY_'+ module + '_1',function(err) {
-            if (err) {
+	if(module == 'cbdirector'){
+		jenkins.job.build('DEPLOY_lbng_IAD',function(err) {
+			if (err) {
 				callback({ err: 'Could not Build Error: ' + err});
 			} else {
 				callback();
 			}
-    });
+		});
+	} else {
+		jenkins.job.build('DEPLOY_'+ module + '_1',function(err) {
+			if (err) {
+				callback({ err: 'Could not Build Error: ' + err});
+			} else {
+				callback();
+			}
+		});
+	}
+
 }
 require('shelljs/global');
 
@@ -219,6 +230,7 @@ app.get('/allResults', function(req, res) {
   });
 });
 
+
 var socket;
 console.log('Waiting For Browser To Connect..')
 io.sockets.on('connection', function(soc) {
@@ -232,6 +244,31 @@ var resultFile;
 //global moduleName
 var moduleName;
 
+/*function getFiles(dir, callback){
+	console.log('Dir is ' + dir);
+	fs.readdirSync(dir, function(err,files) {
+		console.log('In fs');
+		if (err){
+			console.log('Error');
+			console.log(err);
+			callback({ err: 'Could not Find Files: ' + err});
+		}
+		console.log('No error');
+		console.log(files);
+	});
+}*/
+
+function getFiles(dir){
+    var files = fs.readdirSync(dir);
+    for(var i in files){
+        if (!files.hasOwnProperty(i)) continue;
+        var name = dir+files[i];
+        if (!fs.statSync(name).isDirectory()){
+            //console.log(name);
+			exec('python ' + name + ' -e stage -u 501262 -d 2');
+        }
+    }
+}
 
 function createResultsFile(releaseName, moduleName) {
   var resultsRoot = __dirname + '/public/results/';
@@ -265,7 +302,7 @@ function waitAMin(callback) {
 
 function cdToFolderAsync(folder, callback) {
   cd(folder);
-  callback(null, output)
+  callback(null)
 }
 
 function runStep1() {
@@ -360,26 +397,48 @@ function verifyNewBuildInJenkins_2() {
   doJenkinsStep(m, this)
 }
 
+function verifyNewBuildInJenkinsForDLB() {
+	var m = 'DEPLOY_lbng_IAD';
+	logAndStreamData('Step 14: Verifying Last Deploy Info for Job: "' + m + '"');
+	doJenkinsStep(m, this)
+}
 function runStep1ForTest() {
-  logAndStreamData('Step 1: Doing cd ~/autoreg');
-  // cdToFolderAsync(path.homedir() + '/autoreg', this);
-  stub('bla', this);
+  logAndStreamData('Step 15: Doing cd ~/autoreg');
+  cdToFolderAsync(path.homedir() + '/autoreg', this);
+  //stub('bla', this);
 }
 
 function runStep2ForTest(code, output) {
-  logAndStreamData('Step 2: Doing "git checkout develop"');
-  //exec('git checkout develop', this);
-  stub('bla', this);
+  logAndStreamData('Step 16: Doing "git checkout develop"');
+  exec('git checkout develop', this);
+  //stub('bla', this);
 }
 
 function runStep3ForTest(code, output) {
-  logAndStreamData('Step 2: Doing "git pull"');
-  //exec('git pull', this);
-  stub('bla', this);
+  logAndStreamData('Step 17: Doing "git pull"');
+  exec('git pull', this);
+  //stub('bla', this);
 }
 
-function runFinalStep(moduleName, code, output) {
-  logAndStreamData('Step final: Starting Jenkins Commands');
+function runStep4ForDLBTest() {
+  logAndStreamData('Step 18: Doing cd ' + path.homedir() + '/autoreg/frameworks/pyapiframework/apitests/lbdirector/');
+  console.log(path.homedir() + '/autoreg/frameworks/pyapiframework/apitests/lbdirector/');
+  cdToFolderAsync(path.homedir() + '/autoreg/frameworks/pyapiframework/apitests/lbdirector/', this);
+  //stub('bla', this);
+}
+
+function runStep5ForDLBTest() {
+  logAndStreamData('Step 19: Doing "python lbDirectorAddBasicLb.py -e stage -u 501262 -d 2"');
+  var allTestsFolder = path.homedir() + '/autoreg/frameworks/pyapiframework/apitests/lbdirector/';
+  console.log(allTestsFolder);
+  getFiles(allTestsFolder);
+  //exec('python lbDirectorAddBasicLb.py -e stage -u 501262 -d 2', this);
+  //stub('bla', this);
+}
+
+function runFinalStep(code, output) {
+  logAndStreamData(output);
+  logAndStreamData('Step final: Done');
 }
 
 function startTest(releaseName, mName) {
@@ -395,27 +454,57 @@ function startTest(releaseName, mName) {
   }
 
   console.log(moduleName);
-  Step(runStep1,
-    runStep2,
-    runStep3,
-    runStep4,
-    runStep5,
-    runStep6,
-    runStep7,
-    runStep8,
-    runStep9,
-    verifyBuildInfoEnvironment,
-    verifyBuildInfoPackageCache,
-    verifybuildInfoModuleName,
-    buildModuleInJenkins,
-	waitinStep,
-	verifyNewBuildInJenkins_1,
-	waitinStep,
-	verifyNewBuildInJenkins_2,
-	runStep1ForTest,
 
-    runFinalStep
-  );
+  if (moduleName == 'customer-portal')  {
+	Step(runStep1,
+		runStep2,
+		runStep3,
+		runStep4,
+		runStep5,
+		runStep6,
+		runStep7,
+		runStep8,
+		runStep9,
+		verifyBuildInfoEnvironment,
+		verifyBuildInfoPackageCache,
+		verifybuildInfoModuleName,
+		buildModuleInJenkins,
+		waitinStep,
+		verifyNewBuildInJenkins_1,
+		waitinStep,
+		verifyNewBuildInJenkins_2,
+		runStep1ForTest,
+		runFinalStep
+	);
+  }  else if (moduleName == 'cbdirector') {
+	  Step(runStep4ForDLBTest,
+		  runStep5ForDLBTest,
+		  runFinalStep
+	  );
+  } else if (moduleName == 'cbdirectory') {
+	  Step(runStep1,
+		  runStep2,
+		  runStep3,
+		  runStep4,
+		  runStep5,
+		  runStep6,
+		  runStep7,
+		  runStep8,
+		  runStep9,
+		  verifyBuildInfoEnvironment,
+		  verifyBuildInfoPackageCache,
+		  verifybuildInfoModuleName,
+		  buildModuleInJenkins,
+		  waitinStep,
+		  verifyNewBuildInJenkinsForDLB,
+		  runStep1ForTest,
+		  runStep2ForTest,
+		  runStep3ForTest,
+		  runStep4ForDLBTest,
+		  runStep5ForDLBTest,
+		  runFinalStep
+	  );
+  }
 }
 
 app.configure('development', function() {
