@@ -431,7 +431,7 @@ function runStep5ForDLBTest() {
   logAndStreamData('Step 19: Doing "python lbDirectorAddBasicLb.py -e stage -u 501262 -d 2"');
   var allTestsFolder = path.homedir() + '/autoreg/frameworks/pyapiframework/apitests/lbdirector/';
   console.log(allTestsFolder);
-  getFiles(allTestsFolder);
+  getFiles(allTestsFolder, this);
   //exec('python lbDirectorAddBasicLb.py -e stage -u 501262 -d 2', this);
   //stub('bla', this);
 }
