@@ -47,13 +47,13 @@
 								<div class="form-group">
 								<label for="moduleName"  class="col-sm-4 control-label text-right">Module Name:</label>
 									<div class="col-sm-5">
-									<input  class="form-control" id="moduleName" placeholder="customer-portal" value="customer-portal">
+									<input  class="form-control" id="moduleName" placeholder="cbdirector" value="cbdirector">
 								</div>
 							</div>
 								<div class="form-group">
 								<label for="releaseName" class="col-sm-4 control-label text-right">Release Name:</label>
 									<div class=" col-sm-5">
-									<input class="form-control input-large " id="releaseName" placeholder="release/20140326" value="release/20140326">
+									<input class="form-control input-large " id="releaseName" placeholder="release/20131114" value="release/20131114">
 								</div>
 							</div>
 								<div class="form-group">
@@ -139,6 +139,7 @@
 						});
 					});
 				function appendDataToDiv(data) {
+					data = data.replace(/\n/g,'<br>');
 					var className  = "text-success";
 					if(data.indexOf("Error") >=0) {
 						className = "text-danger";
@@ -146,7 +147,7 @@
 					if(data.indexOf('Running Test For:') == 0) {
 						className = 'bg-primary customPadding';
 					}
-					$("#div1").append('<p class="'+className+'">' + data + '</p>');
+					$("#div1").append('<div class="'+className+'">' + data + '</div>');
 				}
 				var socket = io.connect(location);
 				socket.on('TestRunnerChannel', function (data) {

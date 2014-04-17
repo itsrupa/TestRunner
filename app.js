@@ -244,21 +244,25 @@ var resultFile;
 //global moduleName
 var moduleName;
 
-/*function getFiles(dir, callback){
-	console.log('Dir is ' + dir);
-	fs.readdirSync(dir, function(err,files) {
-		console.log('In fs');
+function getFiles(dir, callback){
+	fs.readdir(dir, function(err,files) {
 		if (err){
-			console.log('Error');
-			console.log(err);
 			callback({ err: 'Could not Find Files: ' + err});
+		} else {
+			//console.log(files);
+			var f = [];
+			for (var i in files) {
+				var name = dir+files[i];
+				if (!fs.statSync(name).isDirectory()) {
+					f.push(name);
+				}
+			}
+			callback(null, f);
 		}
-		console.log('No error');
-		console.log(files);
 	});
-}*/
+}
 
-function getFiles(dir){
+/*function getFiles(dir){
     var files = fs.readdirSync(dir);
     for(var i in files){
         if (!files.hasOwnProperty(i)) continue;
@@ -268,7 +272,7 @@ function getFiles(dir){
 			exec('python ' + name + ' -e stage -u 501262 -d 2');
         }
     }
-}
+}*/
 
 function createResultsFile(releaseName, moduleName) {
   var resultsRoot = __dirname + '/public/results/';
@@ -402,6 +406,7 @@ function verifyNewBuildInJenkinsForDLB() {
 	logAndStreamData('Step 14: Verifying Last Deploy Info for Job: "' + m + '"');
 	doJenkinsStep(m, this)
 }
+
 function runStep1ForTest() {
   logAndStreamData('Step 15: Doing cd ~/autoreg');
   cdToFolderAsync(path.homedir() + '/autoreg', this);
@@ -428,12 +433,56 @@ function runStep4ForDLBTest() {
 }
 
 function runStep5ForDLBTest() {
-  logAndStreamData('Step 19: Doing "python lbDirectorAddBasicLb.py -e stage -u 501262 -d 2"');
+  logAndStreamData('Step 19: Getting all files to be executed');
   var allTestsFolder = path.homedir() + '/autoreg/frameworks/pyapiframework/apitests/lbdirector/';
-  console.log(allTestsFolder);
   getFiles(allTestsFolder, this);
   //exec('python lbDirectorAddBasicLb.py -e stage -u 501262 -d 2', this);
   //stub('bla', this);
+}
+
+function runStep6ForDLBTest(err, files){
+	/*logAndStreamData('Step 20: Executing "python xxx.py -e stage -u 501262 -d 2"');
+	if (err){
+		//this
+	} else {
+		for (var i = 0; i < files.length;i++ ){
+			logAndStreamData('Doing "python ' + files[i] +' -e stage -u 501262 -d 2"');
+			exec('python ' + files[i] +' -e stage -u 501262 -d 2');
+		}
+
+	}*/
+	__runStep6ForDLBTest(err, files, this);
+}
+
+function __runStep6ForDLBTest(err, files, callback){
+	var totalTestsCount = 0;
+	var currentTestCount = 0;
+
+	function executeTest(testCommand) {
+		exec(testCommand, function (code, output){
+			logAndStreamData("Test Result For: " + testCommand + "\n");
+			logAndStreamData("****** output ******: \n" + output);
+			if (currentTestCount < (totalTestsCount - 1)){
+				currentTestCount++;
+			} else {
+				callback();
+			}
+		});
+	}
+
+
+	logAndStreamData('Step 20: Executing "python xxx.py -e stage -u 501262 -d 2"');
+	if (err){
+		callback(err);
+	} else {
+		totalTestsCount  = files.length;
+		for (var i = 0; i < totalTestsCount; i++){
+			if (files[i].indexOf("__init__.py") != -1){
+				continue;
+			}
+			executeTest('python ' + files[i] +' -e stage -u 501262 -d 2');
+		}
+	}
 }
 
 function runFinalStep(code, output) {
@@ -479,6 +528,7 @@ function startTest(releaseName, mName) {
   }  else if (moduleName == 'cbdirector') {
 	  Step(runStep4ForDLBTest,
 		  runStep5ForDLBTest,
+		  runStep6ForDLBTest,
 		  runFinalStep
 	  );
   } else if (moduleName == 'cbdirectory') {
